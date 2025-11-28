@@ -42,7 +42,7 @@ app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
       allowed = isExactFront || isVercel || isLocalhost;
-    } catch (_) {
+    catch (_) {
       allowed = false;
     }
 
