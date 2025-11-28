@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
+import useUser from "@/hooks/useUser";
 import {
   UserPlus,
   LogIn,
@@ -58,11 +59,13 @@ function BrandBadge({ isAuth }) {
   );
 }
 
-export default function Header({
-  isAuth = false,
-  user = null,
-  onSignOut = () => {},
-}) {
+export default function Header({ isAuth, user, onSignOut }) {
+  const { user: storedUser, signOut } = useUser();
+  const resolvedUser = user ?? storedUser;
+  const resolvedIsAuth =
+    typeof isAuth === "boolean" ? isAuth : Boolean(resolvedUser);
+  const handleSignOut = onSignOut || signOut || (() => {});
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -71,7 +74,7 @@ export default function Header({
       <div className="max-w-7xl mx-auto px-6 py-3">
         <div className="flex items-center justify-between gap-6">
           {/* Logo */}
-          <BrandBadge isAuth={isAuth} />
+          <BrandBadge isAuth={resolvedIsAuth} />
 
           {/* Nav principal (desktop) */}
           <nav className="hidden lg:flex items-center gap-9 ml-6">
@@ -119,7 +122,7 @@ export default function Header({
             </Link>
 
             {/* Si NO está autenticado: botones Entrar/Registro */}
-            {!isAuth ? (
+            {!resolvedIsAuth ? (
               <div className="hidden md:flex items-center gap-2">
                 <Link href="/login" className="cursor-pointer">
                   <SecondaryButton className="flex items-center gap-2 px-4 py-2 hover:scale-[1.02] transition">
@@ -145,9 +148,13 @@ export default function Header({
                   aria-expanded={menuOpen}
                 >
                   <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#E9F3FF] text-[#4A90E2] text-xs font-bold">
-                    {String(user?.nombre || "P").slice(0, 1).toUpperCase()}
+                    {String(resolvedUser?.nombre || "P")
+                      .slice(0, 1)
+                      .toUpperCase()}
                   </span>
-                  <span className="text-xs font-bold">{roleLabel(user?.rol)}</span>
+                  <span className="text-xs font-bold">
+                    {roleLabel(resolvedUser?.rol || resolvedUser?.role)}
+                  </span>
                   <ChevronDown size={16} />
                 </button>
 
@@ -174,7 +181,7 @@ export default function Header({
                     <button
                       onClick={() => {
                         setMenuOpen(false);
-                        onSignOut();
+                        handleSignOut();
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2 text-[#E53935] hover:bg-[#FFE8E7] transition"
                     >
@@ -226,7 +233,7 @@ export default function Header({
               ))}
             </nav>
 
-            {!isAuth ? (
+            {!resolvedIsAuth ? (
               <div className="flex flex-col gap-3 pt-2">
                 <Link href="/login" onClick={() => setIsMenuOpen(false)}>
                   <SecondaryButton className="w-full flex items-center justify-center gap-2 py-3 cursor-pointer">
@@ -260,7 +267,7 @@ export default function Header({
                 <button
                   onClick={() => {
                     setIsMenuOpen(false);
-                    onSignOut();
+                    handleSignOut();
                   }}
                   className="flex items-center gap-3 px-2 py-2 rounded-lg text-[#E53935] hover:bg-[#FFE8E7]"
                 >
