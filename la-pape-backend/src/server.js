@@ -85,8 +85,10 @@ app.use((err, _req, res, _next) => {
 /* ------------------------------------------------------------------ */
 const PORT = process.env.PORT || 4000;
 
-connectDB()
-  .then(() => {
+const start = async () => {
+  try {
+    await connectDB();
+
     const server = app.listen(PORT, () => console.log(`🚀 API http://localhost:${PORT}`));
 
     // Optional keep-alive ping to prevent free hosts from sleeping (e.g. Render/Railway)
@@ -111,20 +113,10 @@ connectDB()
       const timer = setInterval(ping, intervalMs);
       server.on("close", () => clearInterval(timer));
     }
-  })
-  .catch((e) => {
+  } catch (e) {
     console.error("❌ Error conectando a MongoDB:", e);
     process.exit(1);
-  });
+  }
+};
 
-/* ------------------------------------------------------------------ */
-/* Cierre limpio                                                       */
-/* ------------------------------------------------------------------ */
-process.on("SIGTERM", () => {
-  console.log("Recibido SIGTERM. Cerrando servidor…");
-  process.exit(0);
-});
-process.on("SIGINT", () => {
-  console.log("Recibido SIGINT. Cerrando servidor…");
-  process.exit(0);
-});
+start();
