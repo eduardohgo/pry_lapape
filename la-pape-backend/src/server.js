@@ -17,13 +17,6 @@ const app = express();
 /* ------------------------------------------------------------------ */
 app.set("trust proxy", 1); // necesario en Render/Proxys para cookies, IP real, etc.
 
-// Seguridad y performance
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-}));
-app.use(compression());
-app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
-
 // Allow configuring multiple comma-separated origins (e.g. Vercel + localhost)
 const originsEnv = process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
 const allowedOrigins = originsEnv
@@ -47,23 +40,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
-
-const corsOptions = {
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  origin: (origin, cb) => {
-    // Permite peticiones de herramientas (curl, Postman) o navegadores sin origin
-    if (!origin) return cb(null, true);
-
-    let allowed = false;
-    try {
-      const u = new URL(origin);
-      const hostname = u.hostname;
-
-      const isExactFront = origin === FRONT;
-      const isVercel = hostname.endsWith(".vercel.app");
-      const isLocalhost = hostname === "localhost";
 
       allowed = isExactFront || isVercel || isLocalhost;
     } catch (_) {
@@ -111,12 +87,30 @@ const PORT = process.env.PORT || 4000;
 
 connectDB()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log("========================================");
-      console.log(`🚀 API escuchando en      : http://localhost:${PORT}`);
-      console.log(`🌐 FRONTEND_ORIGIN actual: ${FRONT}`);
-      console.log("========================================");
-    });
+    const server = app.listen(PORT, () => console.log(`🚀 API http://localhost:${PORT}`));
+
+    // Optional keep-alive ping to prevent free hosts from sleeping (e.g. Render/Railway)
+    const keepAliveUrl = process.env.KEEP_ALIVE_URL;
+    if (keepAliveUrl) {
+      const minutes = Number(process.env.KEEP_ALIVE_INTERVAL_MINUTES || 14);
+      const intervalMs = Math.max(1, minutes) * 60 * 1000;
+      console.log(`🕑 Keep-alive activado: ping cada ${intervalMs / 60000} min a ${keepAliveUrl}`);
+
+      const ping = async () => {
+        try {
+          const res = await fetch(keepAliveUrl, { cache: "no-store" });
+          if (!res.ok) {
+            console.error(`Keep-alive: respuesta no OK (${res.status})`);
+          }
+        } catch (err) {
+          console.error(`Keep-alive falló: ${err.message}`);
+        }
+      };
+
+      ping();
+      const timer = setInterval(ping, intervalMs);
+      server.on("close", () => clearInterval(timer));
+    }
   })
   .catch((e) => {
     console.error("❌ Error conectando a MongoDB:", e);
