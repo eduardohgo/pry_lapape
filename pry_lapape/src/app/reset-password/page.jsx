@@ -1,12 +1,12 @@
 "use client";
+import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState } from "react";
 import Header from "@/components/Header";
 import Input from "@/components/Inputs";
 import { PrimaryButton } from "@/components/Buttons";
 import { api } from "@/lib/api";
 
-export default function ResetPassword(){
+function ResetPasswordContent() {
   const params = useSearchParams();
   const emailQ = params.get("email") || "";
   const [email, setEmail] = useState(emailQ);
@@ -24,17 +24,25 @@ export default function ResetPassword(){
   };
 
   return (
+    <section className="max-w-md mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-2">Crear nueva contraseña</h1>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <Input label="Correo" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
+        <Input label="Código" placeholder="OTP recibido" value={code} onChange={e=>setCode(e.target.value)}/>
+        <Input label="Nueva contraseña" type="password" placeholder="Mínimo 8" value={password} onChange={e=>setPassword(e.target.value)}/>
+        <PrimaryButton className="w-full py-3">Actualizar</PrimaryButton>
+      </form>
+    </section>
+  );
+}
+
+export default function ResetPassword(){
+  return (
     <>
       <Header/>
-      <section className="max-w-md mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-2">Crear nueva contraseña</h1>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <Input label="Correo" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
-          <Input label="Código" placeholder="OTP recibido" value={code} onChange={e=>setCode(e.target.value)}/>
-          <Input label="Nueva contraseña" type="password" placeholder="Mínimo 8" value={password} onChange={e=>setPassword(e.target.value)}/>
-          <PrimaryButton className="w-full py-3">Actualizar</PrimaryButton>
-        </form>
-      </section>
+      <Suspense fallback={<section className="max-w-md mx-auto p-6">Cargando formulario…</section>}>
+        <ResetPasswordContent />
+      </Suspense>
     </>
   );
 }
