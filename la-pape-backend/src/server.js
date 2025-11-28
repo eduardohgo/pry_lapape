@@ -50,6 +50,27 @@ app.options("*", cors(corsOptions));
   },
 };
 
+// Allow configuring multiple comma-separated origins (e.g. Vercel + localhost)
+const originsEnv = process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
+const allowedOrigins = originsEnv
+  ? originsEnv
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean)
+  : ["http://localhost:3000", "http://127.0.0.1:3000"];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // allow server-to-server, curl
+    const normalized = origin.endsWith("/") ? origin.slice(0, -1) : origin;
+    if (allowedOrigins.includes(normalized)) return callback(null, true);
+    callback(new Error(`Origen no permitido: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
@@ -87,6 +108,10 @@ const PORT = process.env.PORT || 4000;
 
 const start = async () => {
   try {
+    console.log(`🧭 Node version: ${process.version}`);
+    if (typeof fetch === "undefined") {
+      throw new Error("'fetch' no está disponible: usa Node 18+ o agrega un polyfill");
+    }
     await connectDB();
 
     const server = app.listen(PORT, () => console.log(`🚀 API http://localhost:${PORT}`));
@@ -114,7 +139,7 @@ const start = async () => {
       server.on("close", () => clearInterval(timer));
     }
   } catch (e) {
-    console.error("❌ Error conectando a MongoDB:", e);
+    console.error("❌ Error arrancando el servidor:", e);
     process.exit(1);
   }
 };
