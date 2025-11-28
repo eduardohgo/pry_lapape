@@ -2,71 +2,87 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
+import morgan from "morgan";
+import rateLimit from "express-rate-limit";
+
 import { connectDB } from "./db.js";
 import authRoutes from "./routes/auth.routes.js";
 
 const app = express();
 
-// Render está detrás de proxy
-app.set("trust proxy", 1);
+/* ------------------------------------------------------------------ */
+/* Config básica                                                       */
+/* ------------------------------------------------------------------ */
+app.set("trust proxy", 1); // necesario en Render/Proxys para cookies, IP real, etc.
 
-/* =========================
-   CORS con whitelist flexible
-   ========================= */
-const fromEnv = (name, fallback = "") =>
-  (process.env[name] || fallback).split(",").map(s => s.trim()).filter(Boolean);
+// Seguridad y performance
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
+app.use(compression());
+app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
-// FRONTEND_ORIGIN = https://tuapp.vercel.app
-// ALLOWED_ORIGINS = http://localhost:5173, http://localhost:3000 (opcional)
-const allowed = new Set([
-  ...fromEnv("FRONTEND_ORIGIN"),
-  ...fromEnv("ALLOWED_ORIGINS"),
-]);
+// Rate limit básico (ajusta si necesitas)
+app.use(rateLimit({
+  windowMs: 60 * 1000,         // 1 minuto
+  max: 300,                    // 300 req/min por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 
-// Permitir opcionalmente previews de Vercel (*.vercel.app)
-const allowVercelPreviews = (process.env.ALLOW_VERCEL_PREVIEWS || "false").toLowerCase() === "true";
-const vercelPreviewRE = /^https?:\/\/[a-z0-9-]+(?:-.*)?\.vercel\.app$/i;
+/* ------------------------------------------------------------------ */
+/* CORS                                                               */
+/* ------------------------------------------------------------------ */
+const FRONT = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
 
 const corsOptions = {
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   origin: (origin, cb) => {
-    // Requests sin origin (curl/health checks) -> permitir
+    // Permite peticiones de herramientas (curl, Postman) o navegadores sin origin
     if (!origin) return cb(null, true);
 
-    // Whitelist exacta
-    if (allowed.has(origin)) return cb(null, true);
+    let allowed = false;
+    try {
+      const u = new URL(origin);
+      const hostname = u.hostname;
 
-    // Previews de vercel si están habilitados
-    if (allowVercelPreviews && vercelPreviewRE.test(origin)) return cb(null, true);
+      const isExactFront = origin === FRONT;
+      const isVercel = hostname.endsWith(".vercel.app");
+      const isLocalhost = hostname === "localhost";
 
-    // Rechazar
-    return cb(new Error(`CORS not allowed for origin: ${origin}`));
+      allowed = isExactFront || isVercel || isLocalhost;
+    } catch (_) {
+      allowed = false;
+    }
+
+    return allowed ? cb(null, true) : cb(new Error("CORS: origin no permitido"));
   },
-  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // Preflight
+app.options("*", cors(corsOptions));
 
-/* =============
-   Middlewares
-   ============= */
+/* ------------------------------------------------------------------ */
+/* Parsers                                                            */
+/* ------------------------------------------------------------------ */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-/* =============
-   Rutas
-   ============= */
+/* ------------------------------------------------------------------ */
+/* Rutas                                                              */
+/* ------------------------------------------------------------------ */
 app.get("/", (_req, res) => res.json({ ok: true, name: "La Pape API (Mongo)" }));
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
 app.use("/auth", authRoutes);
 
-/* =============
-   404 y errores
-   ============= */
+/* ------------------------------------------------------------------ */
+/* 404 & errores                                                       */
+/* ------------------------------------------------------------------ */
 app.use((req, res) => {
   res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.originalUrl}` });
 });
@@ -77,24 +93,33 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({ error: err.message || "Internal Server Error" });
 });
 
-/* =============
-   Arranque
-   ============= */
+/* ------------------------------------------------------------------ */
+/* Arranque                                                            */
+/* ------------------------------------------------------------------ */
 const PORT = process.env.PORT || 4000;
 
 connectDB()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`🚀 API escuchando en :${PORT} (NODE_ENV=${process.env.NODE_ENV || "dev"})`);
-      if (allowed.size) {
-        console.log("✅ CORS allowlist:", Array.from(allowed));
-      }
-      if (allowVercelPreviews) {
-        console.log("✅ Previews de Vercel habilitados (*.vercel.app)");
-      }
+      console.log("========================================");
+      console.log(`🚀 API escuchando en      : http://localhost:${PORT}`);
+      console.log(`🌐 FRONTEND_ORIGIN actual: ${FRONT}`);
+      console.log("========================================");
     });
   })
   .catch((e) => {
     console.error("❌ Error conectando a MongoDB:", e);
     process.exit(1);
   });
+
+/* ------------------------------------------------------------------ */
+/* Cierre limpio                                                       */
+/* ------------------------------------------------------------------ */
+process.on("SIGTERM", () => {
+  console.log("Recibido SIGTERM. Cerrando servidor…");
+  process.exit(0);
+});
+process.on("SIGINT", () => {
+  console.log("Recibido SIGINT. Cerrando servidor…");
+  process.exit(0);
+});
