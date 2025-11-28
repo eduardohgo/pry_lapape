@@ -9,16 +9,29 @@ const app = express();
 
 app.set("trust proxy", 1);
 
-const FRONT = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
-app.use(
-  cors({
-    origin: FRONT,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-app.options("*", cors({ origin: FRONT, credentials: true }));
+// Allow configuring multiple comma-separated origins (e.g. Vercel + localhost)
+const originsEnv = process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
+const allowedOrigins = originsEnv
+  ? originsEnv
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean)
+  : ["http://localhost:3000", "http://127.0.0.1:3000"];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // allow server-to-server, curl
+    const normalized = origin.endsWith("/") ? origin.slice(0, -1) : origin;
+    if (allowedOrigins.includes(normalized)) return callback(null, true);
+    callback(new Error(`Origen no permitido: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
