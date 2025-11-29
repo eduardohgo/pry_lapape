@@ -24,3 +24,17 @@ Proveedores como Render, Railway o Koyeb apagan instancias gratuitas tras unos m
 - `npm run dev`: nodemon con recarga en caliente.
 - `npm start`: arranque en producción.
 - `npm test`: marcador de posición.
+
+## Despliegue en Render (paso a paso)
+
+Render detecta monorepos automáticamente, pero para evitar errores de sintaxis por versiones de Node no soportadas sigue estos pasos al crear o actualizar el servicio:
+
+1. **Ruta raíz del servicio:** selecciona la carpeta `la-pape-backend` como _Root Directory_ al crear el servicio web.
+2. **Versión de Node:** Render lee el fichero `.nvmrc`; deja el valor `22.21.0` o configúralo en la variable `NODE_VERSION` del servicio para forzar Node 22.
+3. **Comando de build:** `npm install` (Render lo detecta por defecto, no hace falta compilar).
+4. **Comando de start:** `npm start`.
+5. **Limpiar caché si ya existe el servicio:** pulsa “Clear build cache” en Render y vuelve a desplegar para que tome la versión de Node correcta y el código actualizado.
+6. **Variables de entorno requeridas:** define al menos `MONGODB_URI` y `JWT_SECRET`. Añade `FRONTEND_ORIGINS` con la URL de Vercel y `http://localhost:3000` separadas por comas.
+7. **Comprobar logs iniciales:** tras el deploy revisa la primera línea del log; debe mostrar `Node version: v22.x` antes de iniciar la conexión a MongoDB.
+
+Si Render intenta usar otra versión (por ejemplo v25) normalmente es porque no leyó la raíz correcta o mantiene caché antigua; los pasos 1 y 5 obligan a refrescar la configuración.

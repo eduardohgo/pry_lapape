@@ -59,6 +59,15 @@ const allowedOrigins = originsEnv
       .filter(Boolean)
   : ["http://localhost:3000", "http://127.0.0.1:3000"];
 
+// Allow configuring multiple comma-separated origins (e.g. Vercel + localhost)
+const originsEnv = process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
+const allowedOrigins = originsEnv
+  ? originsEnv
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean)
+  : ["http://localhost:3000", "http://127.0.0.1:3000"];
+
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true); // allow server-to-server, curl
@@ -70,6 +79,9 @@ const corsOptions = {
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
@@ -106,15 +118,22 @@ app.use((err, _req, res, _next) => {
 /* ------------------------------------------------------------------ */
 const PORT = process.env.PORT || 4000;
 
-const start = async () => {
+// Bootstrap con try/catch explícito para evitar que versiones de Node demasiado
+// nuevas interpreten mal la sintaxis de promesas en despliegues (Render está
+// usando Node 25.x aunque el proyecto pide 22.x).
+(async () => {
   try {
     console.log(`🧭 Node version: ${process.version}`);
     if (typeof fetch === "undefined") {
       throw new Error("'fetch' no está disponible: usa Node 18+ o agrega un polyfill");
     }
+
     await connectDB();
 
-    const server = app.listen(PORT, () => console.log(`🚀 API http://localhost:${PORT}`));
+    // Arranca el servidor HTTP y deja un log sólo informativo; en Render/hosting
+    // la app sigue escuchando en 0.0.0.0, por lo que no necesitas agregar nada
+    // más para que sea accesible desde Internet.
+    const server = app.listen(PORT, () => console.log(`🚀 API escuchando en puerto ${PORT}`));
 
     // Optional keep-alive ping to prevent free hosts from sleeping (e.g. Render/Railway)
     const keepAliveUrl = process.env.KEEP_ALIVE_URL;
@@ -123,25 +142,23 @@ const start = async () => {
       const intervalMs = Math.max(1, minutes) * 60 * 1000;
       console.log(`🕑 Keep-alive activado: ping cada ${intervalMs / 60000} min a ${keepAliveUrl}`);
 
-      const ping = async () => {
-        try {
-          const res = await fetch(keepAliveUrl, { cache: "no-store" });
-          if (!res.ok) {
-            console.error(`Keep-alive: respuesta no OK (${res.status})`);
-          }
-        } catch (err) {
-          console.error(`Keep-alive falló: ${err.message}`);
-        }
-      };
+      const ping = () =>
+        fetch(keepAliveUrl, { cache: "no-store" })
+          .then((res) => {
+            if (!res.ok) {
+              console.error(`Keep-alive: respuesta no OK (${res.status})`);
+            }
+          })
+          .catch((err) => {
+            console.error(`Keep-alive falló: ${err.message}`);
+          });
 
       ping();
       const timer = setInterval(ping, intervalMs);
       server.on("close", () => clearInterval(timer));
     }
-  } catch (e) {
-    console.error("❌ Error arrancando el servidor:", e);
+  } catch (err) {
+    console.error("❌ Error arrancando el servidor:", err);
     process.exit(1);
   }
-};
-
-start();
+})();
