@@ -3,15 +3,24 @@ import { useEffect, useState } from "react";
 
 const KEYS = ["user", "usuario", "currentUser"];
 
-function readUser() {
-  if (typeof window === "undefined") return null;
+function readFromStorage(storage) {
   for (const k of KEYS) {
     try {
-      const raw = window.localStorage.getItem(k);
+      const raw = storage.getItem(k);
       if (raw) return JSON.parse(raw);
     } catch {}
   }
   return null;
+}
+
+function readUser() {
+  if (typeof window === "undefined") return null;
+
+  const localUser = readFromStorage(window.localStorage);
+  if (localUser) return localUser;
+
+  // fallback a sesión (ej. usuario eligió "no recordar")
+  return readFromStorage(window.sessionStorage);
 }
 
 export default function useUser() {
@@ -31,8 +40,12 @@ export default function useUser() {
   // util de cierre de sesión
   const signOut = () => {
     try {
-      KEYS.forEach((k) => localStorage.removeItem(k));
+      KEYS.forEach((k) => {
+        localStorage.removeItem(k);
+        sessionStorage.removeItem(k);
+      });
       localStorage.removeItem("token");
+      sessionStorage.removeItem("token");
     } catch {}
     window.location.href = "/login";
   };
