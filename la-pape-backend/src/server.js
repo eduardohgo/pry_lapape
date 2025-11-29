@@ -1,4 +1,3 @@
-// src/server.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -17,21 +16,20 @@ const app = express();
 /* ------------------------------------------------------------------ */
 app.set("trust proxy", 1); // necesario en Render/Proxys para cookies, IP real, etc.
 
-// Allow configuring multiple comma-separated origins (e.g. Vercel + localhost)
 const originsEnv = process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
 const allowedOrigins = originsEnv
-  ? originsEnv
-      .split(",")
-      .map((o) => o.trim())
-      .filter(Boolean)
+  ? originsEnv.split(",").map((o) => o.trim()).filter(Boolean)
   : ["http://localhost:3000", "http://127.0.0.1:3000"];
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // allow server-to-server, curl
+    if (!origin) return callback(null, true); // permite curl y server-to-server
+
     const normalized = origin.endsWith("/") ? origin.slice(0, -1) : origin;
+
     if (allowedOrigins.includes(normalized)) return callback(null, true);
-    callback(new Error(`Origen no permitido: ${origin}`));
+
+    callback(new Error(`CORS: origen no permitido -> ${origin}`));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -41,50 +39,19 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-      allowed = isExactFront || isVercel || isLocalhost;
-    catch (e) {
-      allowed = false;
-    }
-
-    return allowed ? cb(null, true) : cb(new Error("CORS: origin no permitido"));
-  },
-};
-
-// Allow configuring multiple comma-separated origins (e.g. Vercel + localhost)
-const originsEnv = process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
-const allowedOrigins = originsEnv
-  ? originsEnv
-      .split(",")
-      .map((o) => o.trim())
-      .filter(Boolean)
-  : ["http://localhost:3000", "http://127.0.0.1:3000"];
-
-// Allow configuring multiple comma-separated origins (e.g. Vercel + localhost)
-const originsEnv = process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
-const allowedOrigins = originsEnv
-  ? originsEnv
-      .split(",")
-      .map((o) => o.trim())
-      .filter(Boolean)
-  : ["http://localhost:3000", "http://127.0.0.1:3000"];
-
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // allow server-to-server, curl
-    const normalized = origin.endsWith("/") ? origin.slice(0, -1) : origin;
-    if (allowedOrigins.includes(normalized)) return callback(null, true);
-    callback(new Error(`Origen no permitido: ${origin}`));
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-};
-
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
-
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+/* ------------------------------------------------------------------ */
+/* Seguridad y rendimiento                                            */
+/* ------------------------------------------------------------------ */
+app.use(helmet());
+app.use(compression());
+app.use(morgan("dev"));
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: "Demasiadas peticiones, intenta más tarde.",
+  })
+);
 
 /* ------------------------------------------------------------------ */
 /* Parsers                                                            */
@@ -118,9 +85,6 @@ app.use((err, _req, res, _next) => {
 /* ------------------------------------------------------------------ */
 const PORT = process.env.PORT || 4000;
 
-// Bootstrap con try/catch explícito para evitar que versiones de Node demasiado
-// nuevas interpreten mal la sintaxis de promesas en despliegues (Render está
-// usando Node 25.x aunque el proyecto pide 22.x).
 (async () => {
   try {
     console.log(`🧭 Node version: ${process.version}`);
@@ -130,12 +94,10 @@ const PORT = process.env.PORT || 4000;
 
     await connectDB();
 
-    // Arranca el servidor HTTP y deja un log sólo informativo; en Render/hosting
-    // la app sigue escuchando en 0.0.0.0, por lo que no necesitas agregar nada
-    // más para que sea accesible desde Internet.
-    const server = app.listen(PORT, () => console.log(`🚀 API escuchando en puerto ${PORT}`));
+    const server = app.listen(PORT, () => {
+      console.log(`🚀 API escuchando en puerto ${PORT}`);
+    });
 
-    // Optional keep-alive ping to prevent free hosts from sleeping (e.g. Render/Railway)
     const keepAliveUrl = process.env.KEEP_ALIVE_URL;
     if (keepAliveUrl) {
       const minutes = Number(process.env.KEEP_ALIVE_INTERVAL_MINUTES || 14);
@@ -162,3 +124,4 @@ const PORT = process.env.PORT || 4000;
     process.exit(1);
   }
 })();
+
