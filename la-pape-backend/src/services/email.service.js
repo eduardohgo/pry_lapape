@@ -1,48 +1,65 @@
-import nodemailer from "nodemailer";
+// src/services/email.service.js
+import {
+  TransactionalEmailsApi,
+  TransactionalEmailsApiApiKeys,
+} from "@getbrevo/brevo";
 
-const smtpUser = process.env.BREVO_SMTP_USER;
-const smtpPass = process.env.BREVO_SMTP_PASS;
-const mailFrom = process.env.MAIL_FROM;
+const apiKey = process.env.BREVO_API_KEY;
+const fromEmail = process.env.MAIL_FROM_EMAIL;
+const fromName = process.env.MAIL_FROM_NAME || "La Pape";
 
-const smtpHost = process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com";
-const smtpPort = Number(process.env.BREVO_SMTP_PORT || 587);
+const hasAPI = Boolean(apiKey && fromEmail);
 
-const hasSMTP = Boolean(smtpUser && smtpPass && mailFrom);
+let brevoApi = null;
 
-let transporter = null;
-
-if (hasSMTP) {
-  transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-  });
-  console.log("📧 SMTP habilitado (Brevo).");
+if (hasAPI) {
+  brevoApi = new TransactionalEmailsApi();
+  brevoApi.setApiKey(TransactionalEmailsApiApiKeys.apiKey, apiKey);
+  console.log("📧 Brevo API habilitada (sin SMTP).");
 } else {
-  console.log("📭 SMTP NO configurado. MODO DEV: los códigos se imprimirán en consola.");
+  console.log(
+    "📭 Brevo API NO configurada. MODO DEV: los códigos se imprimirán en consola."
+  );
 }
 
 export async function sendMail({ to, subject, html, devLog }) {
-  if (!hasSMTP) {
-    console.log("\n----- DEV MAIL -----");
+  if (!hasAPI) {
+    console.log("\n----- DEV MAIL (SIN BREVO API) -----");
     console.log("TO:", to);
     console.log("SUBJECT:", subject);
-    if (devLog) console.log(devLog);
+    if (devLog) console.log("DEV LOG:", devLog);
     console.log("HTML:\n", html);
-    console.log("--------------------\n");
+    console.log("------------------------------------\n");
     return { messageId: "dev-mail" };
   }
 
-  return transporter.sendMail({
-    from: mailFrom,
-    to,
-    subject,
-    html,
-  });
+  try {
+    const sendSmtpEmail = {
+      sender: { email: fromEmail, name: fromName },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    };
+
+    const data = await brevoApi.sendTransacEmail(sendSmtpEmail);
+
+    console.log("\n✅ Email enviado con Brevo API");
+    console.log("FROM:", `${fromName} <${fromEmail}>`);
+    console.log("TO:", to);
+    console.log("SUBJECT:", subject);
+    console.log("BREVO MESSAGE:", data?.messageId || JSON.stringify(data));
+    console.log("------------------------------------\n");
+
+    return data;
+  } catch (error) {
+    console.error("\n❌ Error enviando email con Brevo API");
+    console.error(
+      "Detalle:",
+      error?.response?.text || error?.message || error
+    );
+    console.error("------------------------------------\n");
+    throw error;
+  }
 }
 
 export const templates = {
