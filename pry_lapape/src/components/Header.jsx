@@ -23,6 +23,35 @@ const roleLabel = (rol) =>
     (rol || "").toUpperCase()
   ] || "CLIENTE");
 
+const normalizeRole = (rol) => (rol || "").toUpperCase();
+
+const navByRole = {
+  PUBLIC: [
+    { href: "/", label: "Inicio" },
+    { href: "/catalogo", label: "Catálogo" },
+    { href: "/nosotros", label: "Nosotros" },
+    { href: "/contacto", label: "Contacto" },
+  ],
+  CLIENTE: [
+    { href: "/cliente", label: "Inicio" },
+    { href: "/catalogo", label: "Catálogo" },
+    { href: "/nosotros", label: "Nosotros" },
+    { href: "/contacto", label: "Contacto" },
+  ],
+  TRABAJADOR: [
+    { href: "/trabajador", label: "Inicio" },
+    { href: "/pedidos", label: "Pedidos" },
+    { href: "/inventario", label: "Inventario" },
+    { href: "/clientes", label: "Clientes" },
+  ],
+  DUENO: [
+    { href: "/dueño", label: "Inicio" },
+    { href: "/reportes", label: "Reportes" },
+    { href: "/caja", label: "Caja" },
+    { href: "/configuracion", label: "Configuración" },
+  ],
+};
+
 /** Badge de marca (cuando está logueado no navega) */
 function BrandBadge({ isAuth }) {
   const Wrapper = isAuth ? "div" : Link;
@@ -66,6 +95,12 @@ export default function Header({ isAuth, user, onSignOut }) {
     typeof isAuth === "boolean" ? isAuth : Boolean(resolvedUser);
   const handleSignOut = onSignOut || signOut || (() => {});
 
+  const role = normalizeRole(resolvedUser?.rol || resolvedUser?.role);
+  const navItems = resolvedIsAuth
+    ? navByRole[role] || navByRole.CLIENTE
+    : navByRole.PUBLIC;
+  const showCartLink = !resolvedIsAuth || role === "CLIENTE" || !role;
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -78,12 +113,7 @@ export default function Header({ isAuth, user, onSignOut }) {
 
           {/* Nav principal (desktop) */}
           <nav className="hidden lg:flex items-center gap-9 ml-6">
-            {[
-              { href: "/", label: "Inicio" },
-              { href: "/catalogo", label: "Catálogo" },
-              { href: "/nosotros", label: "Nosotros" },
-              { href: "/contacto", label: "Contacto" },
-            ].map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -110,16 +140,18 @@ export default function Header({ isAuth, user, onSignOut }) {
 
           {/* Acciones derecha */}
           <div className="flex items-center gap-3">
-            {/* Carrito */}
-            <Link
-              href="/carrito"
-              className="relative p-3 rounded-2xl bg-[#FFF9E6] text-[#1C1C1C] hover:bg-[#FFD54F] transition-colors duration-200 group"
-            >
-              <ShoppingCart size={20} />
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#EC5DBB] text-white text-xs rounded-full flex items-center justify-center font-bold shadow-sm">
-                3
-              </span>
-            </Link>
+            {/* Carrito (solo público/cliente) */}
+            {showCartLink && (
+              <Link
+                href="/carrito"
+                className="relative p-3 rounded-2xl bg-[#FFF9E6] text-[#1C1C1C] hover:bg-[#FFD54F] transition-colors duration-200 group"
+              >
+                <ShoppingCart size={20} />
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#EC5DBB] text-white text-xs rounded-full flex items-center justify-center font-bold shadow-sm">
+                  3
+                </span>
+              </Link>
+            )}
 
             {/* Si NO está autenticado: botones Entrar/Registro */}
             {!resolvedIsAuth ? (
@@ -215,13 +247,7 @@ export default function Header({ isAuth, user, onSignOut }) {
             </div>
 
             <nav className="space-y-3">
-              {[
-                { href: "/", label: "Inicio" },
-                { href: "/catalogo", label: "Catálogo" },
-                { href: "/nosotros", label: "Nosotros" },
-                { href: "/contacto", label: "Contacto" },
-                { href: "/carrito", label: "Carrito" },
-              ].map((item) => (
+              {[...navItems, ...(showCartLink ? [{ href: "/carrito", label: "Carrito" }] : [])].map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}

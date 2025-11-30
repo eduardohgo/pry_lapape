@@ -30,6 +30,12 @@ export default function LoginPage() {
       rol: role,
       isVerified: rawUser?.isVerified ?? payload?.isVerified ?? true,
       twoFAEnabled: rawUser?.twoFAEnabled ?? payload?.twoFAEnabled ?? false,
+      loginMethod:
+        rawUser?.loginMethod ||
+        payload?.loginMethod ||
+        (rawUser?.twoFAEnabled || payload?.twoFAEnabled ? "PASSWORD_2FA" : "PASSWORD_ONLY"),
+      secretQuestion: rawUser?.secretQuestion || payload?.secretQuestion || "",
+      hasSecretQuestion: rawUser?.hasSecretQuestion ?? payload?.hasSecretQuestion ?? false,
       lastLoginAt: rawUser?.lastLoginAt || payload?.lastLoginAt || null,
     };
   };
@@ -64,6 +70,24 @@ export default function LoginPage() {
         return;
       }
 
+      if (res.stage === "secret-question") {
+        try {
+          sessionStorage.setItem(
+            "pending-secret-question",
+            JSON.stringify({
+              email: emailTrimmed,
+              remember,
+              question: res.secretQuestion || "",
+              user: res.user || null,
+            })
+          );
+        } catch (storageErr) {
+          console.warn("No se pudo guardar el estado para la pregunta secreta", storageErr);
+        }
+        router.push(`/verificar-pregunta?email=${encodeURIComponent(emailTrimmed)}`);
+        return;
+      }
+
       // 2) Si requiere OTP (2FA por correo)
       if (res.needOtp || res.stage === "2fa") {
         try {
@@ -84,8 +108,9 @@ export default function LoginPage() {
         authLogin({ user, token: res.token, remember });
         try {
           sessionStorage.removeItem("pending-2fa");
+          sessionStorage.removeItem("pending-secret-question");
         } catch (storageErr) {
-          console.warn("No se pudo limpiar el estado de 2FA", storageErr);
+          console.warn("No se pudo limpiar el estado de autenticación en dos pasos", storageErr);
         }
         goToDashboard(user.role || user.rol);
         return;
