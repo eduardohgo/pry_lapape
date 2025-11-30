@@ -3,20 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": "22.12.0"
-  },
   "main": "src/server.js",
   "scripts": {
-    "check": "node --check src/server.js",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "echo \"No hay tests todavía\" && exit 0"
   },
   "engines": {
-  "node": "20.x"
-},
+    "node": ">=18"
+  },
   "dependencies": {
+    "@getbrevo/brevo": "^3.0.1",
     "bcrypt": "^6.0.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
@@ -27,7 +24,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.2",
     "morgan": "^1.10.1",
-    "nodemailer": "^7.0.10"
+    "nodemailer": "^7.0.10",
+    "resend": "^6.5.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
