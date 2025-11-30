@@ -62,6 +62,12 @@ function Verificar2FAContent() {
       rol: role,
       isVerified: rawUser?.isVerified ?? payload?.isVerified ?? true,
       twoFAEnabled: rawUser?.twoFAEnabled ?? payload?.twoFAEnabled ?? false,
+      loginMethod:
+        rawUser?.loginMethod ||
+        payload?.loginMethod ||
+        (rawUser?.twoFAEnabled || payload?.twoFAEnabled ? "PASSWORD_2FA" : "PASSWORD_ONLY"),
+      secretQuestion: rawUser?.secretQuestion || payload?.secretQuestion || "",
+      hasSecretQuestion: rawUser?.hasSecretQuestion ?? payload?.hasSecretQuestion ?? false,
       lastLoginAt: rawUser?.lastLoginAt || payload?.lastLoginAt || null,
     };
   };

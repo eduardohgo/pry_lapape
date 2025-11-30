@@ -18,6 +18,13 @@ import {
 const rawMinutes = Number.parseInt(process.env.JWT_EXPIRES_MINUTES || "", 10);
 const SESSION_MINUTES = Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : 120;
 const JWT_EXPIRES_IN = `${SESSION_MINUTES}m`;
+const LOGIN_METHODS = ["PASSWORD_ONLY", "PASSWORD_2FA", "PASSWORD_SECRET"];
+
+function resolveLoginMethod(user) {
+  if (LOGIN_METHODS.includes(user.loginMethod)) return user.loginMethod;
+  if (user.twoFAEnabled) return "PASSWORD_2FA";
+  return "PASSWORD_ONLY";
+}
 
 function toPublicUser(user) {
   const role = (user.rol || user.role || "CLIENTE").toString().toUpperCase();
@@ -29,6 +36,9 @@ function toPublicUser(user) {
     role,
     isVerified: user.isVerified,
     twoFAEnabled: user.twoFAEnabled,
+    loginMethod: resolveLoginMethod(user),
+    secretQuestion: user.secretQuestion,
+    hasSecretQuestion: Boolean(user.secretQuestion && user.secretAnswerHash),
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
@@ -187,12 +197,32 @@ export async function loginStep1(req, res, next) {
         .json({ error: "Verifica tu correo antes de continuar", needEmailVerify: true });
     }
 
-    if (!user.twoFAEnabled) {
+    const loginMethod = resolveLoginMethod(user);
+
+    if (loginMethod === "PASSWORD_ONLY") {
+      user.twoFAEnabled = false;
       const loginResult = await finalizeLogin(user, req);
       return res.json({ ok: true, stage: "done", ...loginResult, user: toPublicUser(user) });
     }
 
+    if (loginMethod === "PASSWORD_SECRET") {
+      if (!user.secretQuestion || !user.secretAnswerHash) {
+        return res
+          .status(400)
+          .json({ error: "No hay pregunta secreta configurada para esta cuenta" });
+      }
+      return res.json({
+        ok: true,
+        stage: "secret-question",
+        email: user.email,
+        secretQuestion: user.secretQuestion,
+        user: toPublicUser(user),
+      });
+    }
+
     const code = random6();
+    user.loginMethod = "PASSWORD_2FA";
+    user.twoFAEnabled = true;
     user.twoFAHash = await hashToken(code);
     user.twoFAExp = expMinutes(10);
     await user.save();
@@ -227,7 +257,9 @@ export async function loginStep2(req, res, next) {
     }
 
     const user = await User.findOne({ email: normalizeEmail(email) });
-    if (!user || !user.twoFAEnabled) {
+    const loginMethod = user ? resolveLoginMethod(user) : null;
+
+    if (!user || loginMethod !== "PASSWORD_2FA") {
       return res.status(400).json({ error: "Solicitud inválida" });
     }
 
@@ -246,6 +278,38 @@ export async function loginStep2(req, res, next) {
 
     user.twoFAHash = undefined;
     user.twoFAExp = undefined;
+
+    const loginResult = await finalizeLogin(user, req);
+    return res.json({ ok: true, ...loginResult, user: toPublicUser(user) });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function verifySecretQuestion(req, res, next) {
+  try {
+    const { email, answer } = req.body;
+    const trimmedAnswer = typeof answer === "string" ? answer.trim() : "";
+
+    if (!isEmail(email) || !trimmedAnswer) {
+      return res.status(400).json({ error: "Solicitud inválida" });
+    }
+
+    const user = await User.findOne({ email: normalizeEmail(email) });
+    const loginMethod = user ? resolveLoginMethod(user) : null;
+
+    if (!user || loginMethod !== "PASSWORD_SECRET") {
+      return res.status(400).json({ error: "Solicitud inválida" });
+    }
+
+    if (!user.secretAnswerHash || !user.secretQuestion) {
+      return res.status(400).json({ error: "No hay pregunta secreta activa" });
+    }
+
+    const ok = await bcrypt.compare(trimmedAnswer, user.secretAnswerHash);
+    if (!ok) {
+      return res.status(400).json({ error: "Respuesta incorrecta" });
+    }
 
     const loginResult = await finalizeLogin(user, req);
     return res.json({ ok: true, ...loginResult, user: toPublicUser(user) });
@@ -337,6 +401,61 @@ export async function logout(req, res, next) {
     await user.save();
 
     return res.json({ ok: true, message: "Sesión cerrada" });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function updateLoginMethod(req, res, next) {
+  try {
+    const method = typeof req.body?.method === "string" ? req.body.method.toUpperCase() : "";
+    const question = typeof req.body?.question === "string" ? req.body.question.trim() : undefined;
+    const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : undefined;
+
+    if (!LOGIN_METHODS.includes(method)) {
+      return res.status(400).json({ error: "Método de acceso inválido" });
+    }
+
+    const user = req.user;
+
+    if (method === "PASSWORD_SECRET") {
+      const finalQuestion = question ?? user.secretQuestion ?? "";
+      if (!finalQuestion.trim()) {
+        return res.status(400).json({ error: "Debes definir la pregunta secreta" });
+      }
+
+      if (!answer && !user.secretAnswerHash) {
+        return res.status(400).json({ error: "Debes definir la respuesta secreta" });
+      }
+
+      user.secretQuestion = finalQuestion.trim();
+      if (answer) {
+        user.secretAnswerHash = await bcrypt.hash(answer, 10);
+      }
+    } else {
+      if (question) {
+        user.secretQuestion = question;
+      }
+      if (answer) {
+        user.secretAnswerHash = await bcrypt.hash(answer, 10);
+      }
+    }
+
+    user.loginMethod = method;
+    user.twoFAEnabled = method === "PASSWORD_2FA";
+
+    if (method !== "PASSWORD_2FA") {
+      user.twoFAHash = undefined;
+      user.twoFAExp = undefined;
+    }
+
+    await user.save();
+
+    return res.json({
+      ok: true,
+      message: "Método de inicio de sesión actualizado",
+      user: toPublicUser(user),
+    });
   } catch (err) {
     return next(err);
   }

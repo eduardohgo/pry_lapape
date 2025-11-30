@@ -28,6 +28,13 @@ const userSchema = new Schema(
     verifyCodeExpires: { type: Date },
 
     twoFAEnabled: { type: Boolean, default: true },
+    loginMethod: {
+      type: String,
+      enum: ["PASSWORD_ONLY", "PASSWORD_2FA", "PASSWORD_SECRET"],
+      default: "PASSWORD_2FA",
+    },
+    secretQuestion: { type: String, trim: true },
+    secretAnswerHash: { type: String },
     twoFAHash: { type: String },
     twoFAExp: { type: Date },
 
