@@ -17,16 +17,19 @@ const userSchema = new Schema(
     nombre: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
+
     rol: {
       type: String,
       enum: ["CLIENTE", "TRABAJADOR", "DUENO", "ADMIN"],
       default: "CLIENTE",
     },
 
+    // Verificación de cuenta
     isVerified: { type: Boolean, default: false },
     verifyCode: { type: String },
     verifyCodeExpires: { type: Date },
 
+    // Configuración de login / 2FA
     twoFAEnabled: { type: Boolean, default: true },
     loginMethod: {
       type: String,
@@ -35,12 +38,24 @@ const userSchema = new Schema(
     },
     secretQuestion: { type: String, trim: true },
     secretAnswerHash: { type: String },
+
     twoFAHash: { type: String },
     twoFAExp: { type: Date },
 
+    // Recuperación de contraseña por OTP
     resetOTPHash: { type: String },
     resetOTPExp: { type: Date },
 
+    // 🔐 Control de intentos de recuperación (lista de cotejo)
+    resetAttempts: { type: Number, default: 0 },
+    resetLastAttemptAt: { type: Date },
+    resetBlockedUntil: { type: Date },
+
+    // 🔐 Control de intentos fallidos de login (fuerza bruta)
+    failedLoginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date },
+
+    // Sesiones / auditoría
     lastLoginAt: { type: Date },
     sessions: { type: [sessionSchema], default: [] },
   },
@@ -49,7 +64,9 @@ const userSchema = new Schema(
 
 userSchema.methods.clearExpiredSessions = function clearExpiredSessions(now = new Date()) {
   if (!Array.isArray(this.sessions) || this.sessions.length === 0) return;
-  this.sessions = this.sessions.filter((session) => session.expiresAt && session.expiresAt > now);
+  this.sessions = this.sessions.filter(
+    (session) => session.expiresAt && session.expiresAt > now
+  );
 };
 
 export default mongoose.model("User", userSchema);
