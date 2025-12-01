@@ -1,7 +1,9 @@
 // src/services/email.service.js
 import {
   TransactionalEmailsApi,
-  TransactionalEmailsApiApiKeys,
+  TransactionalEmailsApiApiKeys
+  
+  ,
 } from "@getbrevo/brevo";
 
 const apiKey = process.env.BREVO_API_KEY;
