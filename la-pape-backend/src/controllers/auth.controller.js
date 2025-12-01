@@ -1,3 +1,4 @@
+// src/controllers/auth.controller.js
 import bcrypt from "bcrypt";
 import User from "../models/User.js";
 import { sendMail, templates } from "../services/email.service.js";
@@ -16,9 +17,18 @@ import {
 } from "../utils/validators.js";
 
 const rawMinutes = Number.parseInt(process.env.JWT_EXPIRES_MINUTES || "", 10);
-const SESSION_MINUTES = Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : 120;
+const SESSION_MINUTES =
+  Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : 120;
 const JWT_EXPIRES_IN = `${SESSION_MINUTES}m`;
 const LOGIN_METHODS = ["PASSWORD_ONLY", "PASSWORD_2FA", "PASSWORD_SECRET"];
+
+// 🔐 Límites de seguridad (lista de cotejo)
+const MAX_FAILED_LOGIN_ATTEMPTS = 5; // intentos de login
+const LOGIN_LOCK_MINUTES = 15; // tiempo bloqueado
+
+const MAX_RESET_REQUESTS = 3; // solicitudes de recuperación
+const RESET_WINDOW_MINUTES = 15; // ventana para contar intentos
+const RESET_BLOCK_MINUTES = 30; // bloqueo después de exceder
 
 function resolveLoginMethod(user) {
   if (LOGIN_METHODS.includes(user.loginMethod)) return user.loginMethod;
@@ -86,7 +96,9 @@ export async function register(req, res, next) {
     }
 
     if (!isStrongPassword(password)) {
-      return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres" });
+      return res
+        .status(400)
+        .json({ error: "La contraseña no cumple los requisitos de seguridad" });
     }
 
     if (rol && !isValidRole(rol)) {
@@ -135,7 +147,8 @@ export async function verifyEmail(req, res, next) {
   try {
     const { email, code } = req.body;
     const normalizedEmail = normalizeEmail(email);
-    const trimmedCode = typeof code === "string" ? code.trim() : String(code || "").trim();
+    const trimmedCode =
+      typeof code === "string" ? code.trim() : String(code || "").trim();
 
     if (!isEmail(email) || !trimmedCode) {
       return res.status(400).json({ error: "Solicitud inválida" });
@@ -186,15 +199,46 @@ export async function loginStep1(req, res, next) {
       return res.status(400).json({ error: "Credenciales inválidas" });
     }
 
+    const now = new Date();
+
+    // 🔐 Si la cuenta está bloqueada por intentos fallidos
+    if (user.lockUntil && user.lockUntil > now) {
+      const minutesLeft = Math.ceil((user.lockUntil - now) / 60000);
+      return res.status(423).json({
+        error:
+          "Cuenta bloqueada por intentos fallidos. Intenta de nuevo más tarde.",
+        locked: true,
+        minutesLeft,
+      });
+    }
+
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) {
+      // Aumentar contador de intentos fallidos
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+
+      // Bloquear si se alcanza el límite
+      if (user.failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+        user.lockUntil = new Date(
+          now.getTime() + LOGIN_LOCK_MINUTES * 60 * 1000
+        );
+        user.failedLoginAttempts = 0;
+      }
+
+      await user.save();
       return res.status(400).json({ error: "Credenciales inválidas" });
     }
 
+    // Login correcto → limpiar bloqueos
+    user.failedLoginAttempts = 0;
+    user.lockUntil = undefined;
+
     if (!user.isVerified) {
-      return res
-        .status(403)
-        .json({ error: "Verifica tu correo antes de continuar", needEmailVerify: true });
+      await user.save();
+      return res.status(403).json({
+        error: "Verifica tu correo antes de continuar",
+        needEmailVerify: true,
+      });
     }
 
     const loginMethod = resolveLoginMethod(user);
@@ -202,15 +246,22 @@ export async function loginStep1(req, res, next) {
     if (loginMethod === "PASSWORD_ONLY") {
       user.twoFAEnabled = false;
       const loginResult = await finalizeLogin(user, req);
-      return res.json({ ok: true, stage: "done", ...loginResult, user: toPublicUser(user) });
+      return res.json({
+        ok: true,
+        stage: "done",
+        ...loginResult,
+        user: toPublicUser(user),
+      });
     }
 
     if (loginMethod === "PASSWORD_SECRET") {
       if (!user.secretQuestion || !user.secretAnswerHash) {
-        return res
-          .status(400)
-          .json({ error: "No hay pregunta secreta configurada para esta cuenta" });
+        await user.save();
+        return res.status(400).json({
+          error: "No hay pregunta secreta configurada para esta cuenta",
+        });
       }
+      await user.save();
       return res.json({
         ok: true,
         stage: "secret-question",
@@ -250,7 +301,8 @@ export async function loginStep1(req, res, next) {
 export async function loginStep2(req, res, next) {
   try {
     const { email, code } = req.body;
-    const trimmedCode = typeof code === "string" ? code.trim() : String(code || "").trim();
+    const trimmedCode =
+      typeof code === "string" ? code.trim() : String(code || "").trim();
 
     if (!isEmail(email) || !trimmedCode) {
       return res.status(400).json({ error: "Solicitud inválida" });
@@ -322,19 +374,63 @@ export async function forgotPassword(req, res, next) {
   try {
     const { email } = req.body;
     if (!isEmail(email)) {
-      return res.json({ ok: true, message: "Si el correo existe, enviaremos un código" });
+      return res.json({
+        ok: true,
+        message: "Si el correo existe, enviaremos un código",
+      });
     }
 
     const normalizedEmail = normalizeEmail(email);
     const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
-      return res.json({ ok: true, message: "Si el correo existe, enviaremos un código" });
+      return res.json({
+        ok: true,
+        message: "Si el correo existe, enviaremos un código",
+      });
     }
 
+    const now = new Date();
+
+    // 🔐 Si está bloqueado por demasiadas solicitudes
+    if (user.resetBlockedUntil && user.resetBlockedUntil > now) {
+      return res.json({
+        ok: true,
+        message: "Si el correo existe, enviaremos un código cuando sea posible.",
+      });
+    }
+
+    // Reiniciar contador si se pasó la ventana
+    if (
+      user.resetLastAttemptAt &&
+      now.getTime() - user.resetLastAttemptAt.getTime() >
+        RESET_WINDOW_MINUTES * 60 * 1000
+    ) {
+      user.resetAttempts = 0;
+    }
+
+    user.resetAttempts = (user.resetAttempts || 0) + 1;
+    user.resetLastAttemptAt = now;
+
+    if (user.resetAttempts > MAX_RESET_REQUESTS) {
+      // Bloquear nuevas solicitudes
+      user.resetBlockedUntil = new Date(
+        now.getTime() + RESET_BLOCK_MINUTES * 60 * 1000
+      );
+      await user.save();
+
+      return res.json({
+        ok: true,
+        message: "Si el correo existe, enviaremos un código cuando sea posible.",
+      });
+    }
+
+    // Generar código normalmente
     const code = random6();
     user.resetOTPHash = await hashToken(code);
     user.resetOTPExp = expMinutes(10);
+    user.resetBlockedUntil = undefined;
+
     await user.save();
 
     await sendMail({
@@ -344,7 +440,11 @@ export async function forgotPassword(req, res, next) {
       devLog: `CÓDIGO RESET: ${code}`,
     });
 
-    return res.json({ ok: true, message: "Si el correo existe, se envió un código (o se imprimió en consola)" });
+    return res.json({
+      ok: true,
+      message:
+        "Si el correo existe, se envió un código (o se imprimió en consola)",
+    });
   } catch (err) {
     return next(err);
   }
@@ -380,6 +480,15 @@ export async function resetPassword(req, res, next) {
     user.sessions = [];
     user.lastLoginAt = undefined;
 
+    // 🔐 Limpiar contadores de recuperación y bloqueos
+    user.resetAttempts = 0;
+    user.resetLastAttemptAt = undefined;
+    user.resetBlockedUntil = undefined;
+
+    // 🔐 También limpiamos bloqueos de login por si los tenía
+    user.failedLoginAttempts = 0;
+    user.lockUntil = undefined;
+
     await user.save();
 
     return res.json({ ok: true, message: "Contraseña actualizada" });
@@ -408,9 +517,18 @@ export async function logout(req, res, next) {
 
 export async function updateLoginMethod(req, res, next) {
   try {
-    const method = typeof req.body?.method === "string" ? req.body.method.toUpperCase() : "";
-    const question = typeof req.body?.question === "string" ? req.body.question.trim() : undefined;
-    const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : undefined;
+    const method =
+      typeof req.body?.method === "string"
+        ? req.body.method.toUpperCase()
+        : "";
+    const question =
+      typeof req.body?.question === "string"
+        ? req.body.question.trim()
+        : undefined;
+    const answer =
+      typeof req.body?.answer === "string"
+        ? req.body.answer.trim()
+        : undefined;
 
     if (!LOGIN_METHODS.includes(method)) {
       return res.status(400).json({ error: "Método de acceso inválido" });
@@ -421,11 +539,15 @@ export async function updateLoginMethod(req, res, next) {
     if (method === "PASSWORD_SECRET") {
       const finalQuestion = question ?? user.secretQuestion ?? "";
       if (!finalQuestion.trim()) {
-        return res.status(400).json({ error: "Debes definir la pregunta secreta" });
+        return res
+          .status(400)
+          .json({ error: "Debes definir la pregunta secreta" });
       }
 
       if (!answer && !user.secretAnswerHash) {
-        return res.status(400).json({ error: "Debes definir la respuesta secreta" });
+        return res
+          .status(400)
+          .json({ error: "Debes definir la respuesta secreta" });
       }
 
       user.secretQuestion = finalQuestion.trim();
