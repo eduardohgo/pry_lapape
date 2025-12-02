@@ -16,7 +16,8 @@ export default function RootLayout({ children }) {
         <Script
           id="contentsquare-tag"
           strategy="afterInteractive"
-          src="https://t.contentsquare.net/uxa/d6ed8b7dad4d.js" // 👈 usa AQUÍ exactamente la URL que te sale en “Tag installation”
+          src="https://t.contentsquare.net/uxa/d6ed8b7dad4d.js" 
+          // 👆 aquí pon EXACTAMENTE la URL que ves en "Tag installation"
         />
       </head>
       <body>
@@ -25,4 +26,3 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
-
