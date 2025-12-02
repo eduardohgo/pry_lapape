@@ -1,6 +1,7 @@
+// src/app/layout.js
 import "./globals.css";
 import AuthProvider from "@/components/AuthProvider";
-import ClarityTag from "@/components/ClarityTag"; // 👈 IMPORTANTE
+import HotjarTag from "@/components/HotjarTag"; // 👈 importa Hotjar
 
 export const metadata = {
   title: "La Pape",
@@ -12,8 +13,7 @@ export default function RootLayout({ children }) {
     <html lang="es">
       <body>
         <AuthProvider>
-          {/* Inyecta el script de Clarity en TODAS las páginas */}
-          <ClarityTag />
+          <HotjarTag />  {/* 👈 aquí inyectas el script de Hotjar */}
           {children}
         </AuthProvider>
       </body>
