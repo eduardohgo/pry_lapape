@@ -1,7 +1,6 @@
 // src/app/layout.js
 import "./globals.css";
 import AuthProvider from "@/components/AuthProvider";
-import ContentsquareTag from "@/components/ContentsquareTag"; // 👈 IMPORTANTE
 
 export const metadata = {
   title: "La Pape",
@@ -11,14 +10,18 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
+      <head>
+        {/* Script de Contentsquare directamente en el head */}
+        <script
+          id="contentsquare-tag"
+          src="https://t.contentsquare.net/uxa/d6ed8b7dad4d.js"
+          async
+        ></script>
+      </head>
       <body>
-        <AuthProvider>
-          {/* Inyecta el script de Contentsquare en el <head> */}
-          <ContentsquareTag />
-          {children}
-        </AuthProvider>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
-  
 }
+
