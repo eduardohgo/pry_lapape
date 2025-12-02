@@ -1,7 +1,7 @@
 // src/app/layout.js
 import "./globals.css";
 import AuthProvider from "@/components/AuthProvider";
-import HotjarTag from "@/components/HotjarTag"; // 👈 importa Hotjar
+import ContentsquareTag from "@/components/ContentsquareTag"; // 👉 IMPORTANTE
 
 export const metadata = {
   title: "La Pape",
@@ -13,11 +13,13 @@ export default function RootLayout({ children }) {
     <html lang="es">
       <body>
         <AuthProvider>
-          <HotjarTag />  {/* 👈 aquí inyectas el script de Hotjar */}
+          {/* Inyecta el script de Contentsquare */}
+          <ContentsquareTag />
           {children}
         </AuthProvider>
       </body>
     </html>
   );
 }
+
 
