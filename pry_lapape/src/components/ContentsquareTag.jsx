@@ -10,7 +10,7 @@ export default function ContentsquareTag() {
 
     const script = document.createElement("script");
     script.id = "contentsquare-tag";
-    script.src = "https://t.contentsquare.net/uxa/f56a36a847b79.js"; // 👈 TU URL
+    script.src = "https://t.contentsquare.net/uxa/d6ed8b7dad4d4.js"; // 👈 TU URL
     script.async = true;
 
     document.head.appendChild(script);
