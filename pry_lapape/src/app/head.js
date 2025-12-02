@@ -9,7 +9,7 @@ export default function Head() {
       {/* 🔴 AQUÍ VA EL SCRIPT DE CONTENTSQUARE */}
       <script
         id="contentsquare-tag"
-        src="https://t.contentsquare.net/uxa/d6ed8b7dad4d.js"
+        src="https://t.contentsquare.net/uxa/f56a36a847b7.js"
         async
       ></script>
     </>
