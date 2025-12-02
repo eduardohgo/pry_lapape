@@ -1,7 +1,7 @@
 // src/app/layout.js
 import "./globals.css";
 import AuthProvider from "@/components/AuthProvider";
-import Script from "next/script"; // 👈 IMPORTANTE
+import ContentsquareTag from "@/components/ContentsquareTag"; // 👈 import nuevo
 
 export const metadata = {
   title: "La Pape",
@@ -11,17 +11,12 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
-      <head>
-        {/* Tag de Contentsquare */}
-        <Script
-          id="contentsquare-tag"
-          strategy="afterInteractive"
-          src="https://t.contentsquare.net/uxa/d6ed8b7dad4d.js" 
-          // 👆 aquí pon EXACTAMENTE la URL que ves en "Tag installation"
-        />
-      </head>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {/* Inyecta el tag de Contentsquare */}
+          <ContentsquareTag />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
