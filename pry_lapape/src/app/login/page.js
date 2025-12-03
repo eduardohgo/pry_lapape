@@ -8,6 +8,7 @@ import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { LogIn, UserPlus, Package, Sparkles, Shield, Truck, Star } from "lucide-react";
 import { api, decodeJWT } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import { GoogleLogin } from "@react-oauth/google"; // 👈 NUEVO
 
 export default function LoginPage() {
   const router = useRouter();
@@ -130,6 +131,52 @@ export default function LoginPage() {
     }
   };
 
+  // 👇 NUEVO: handlers para Google
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      setLoading(true);
+      const idToken = credentialResponse?.credential;
+
+      if (!idToken) {
+        alert("No se recibió el token de Google. Intenta de nuevo.");
+        return;
+      }
+
+      const res = await api("/auth/login/google", {
+        body: { idToken },
+      });
+
+      if (res?.token) {
+        // usamos el email del backend si viene, si no, el que esté en el JWT
+        const fallbackEmail = res.user?.email || "";
+        const user = normalizeUser(res.user, fallbackEmail, res.token);
+
+        // con Google lo guardamos como 'remember: true' para que se quede la sesión
+        authLogin({ user, token: res.token, remember: true });
+
+        try {
+          sessionStorage.removeItem("pending-2fa");
+          sessionStorage.removeItem("pending-secret-question");
+        } catch (storageErr) {
+          console.warn("No se pudo limpiar el estado de autenticación en dos pasos", storageErr);
+        }
+
+        goToDashboard(user.role || user.rol);
+      } else {
+        alert("No se pudo iniciar sesión con Google.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Error al iniciar sesión con Google");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    alert("No se pudo completar el inicio de sesión con Google.");
+  };
+
   return (
     <>
       <Header />
@@ -229,16 +276,13 @@ export default function LoginPage() {
               <div className="flex-grow border-t border-[#E0E0E0]"></div>
             </div>
 
-            {/* Login social (placeholder) */}
-            <div className="grid grid-cols-2 gap-4">
-              <button className="flex items-center justify-center gap-3 p-4 rounded-2xl border-2 border-[#E0E0E0] bg-white text-[#333333] font-semibold hover:border-[#4A90E2] hover:text-[#4A90E2] transition-all duration-200 hover:shadow-sm">
-                <span className="text-xl">🔍</span>
-                Google
-              </button>
-              <button className="flex items-center justify-center gap-3 p-4 rounded-2xl border-2 border-[#E0E0E0] bg-white text-[#333333] font-semibold hover:border-[#EC5DBB] hover:text-[#EC5DBB] transition-all duration-200 hover:shadow-sm">
-                <span className="text-xl">👥</span>
-                Facebook
-              </button>
+            {/* Login con Google real */}
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                width="100%"
+              />
             </div>
           </div>
         </div>
@@ -355,3 +399,4 @@ export default function LoginPage() {
     </>
   );
 }
+
