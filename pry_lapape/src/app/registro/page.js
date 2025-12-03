@@ -76,10 +76,14 @@ export default function RegistroPage() {
     const hasUpper = /[A-Z]/.test(password);
     const hasLower = /[a-z]/.test(password);
     const hasNumber = /\d/.test(password);
-    return { hasMin, hasUpper, hasLower, hasNumber };
+    const hasSpecial = /[^A-Za-z0-9]/.test(password); // 👈 carácter especial
+    return { hasMin, hasUpper, hasLower, hasNumber, hasSpecial };
   }, [password]);
 
-  const passwordsMatch = useMemo(() => password2.length > 0 && password2 === password, [password, password2]);
+  const passwordsMatch = useMemo(
+    () => password2.length > 0 && password2 === password,
+    [password, password2]
+  );
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -98,6 +102,18 @@ export default function RegistroPage() {
     }
     if (password.length < 8) {
       setErrorMsg("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    // 👇 validación extra para que coincida con los requisitos mostrados
+    if (
+      !pwRules.hasUpper ||
+      !pwRules.hasLower ||
+      !pwRules.hasNumber ||
+      !pwRules.hasSpecial
+    ) {
+      setErrorMsg(
+        "La contraseña debe tener al menos una mayúscula, una minúscula, un número y un carácter especial."
+      );
       return;
     }
 
@@ -119,8 +135,12 @@ export default function RegistroPage() {
         throw new Error(joined || data.error || "Error en registro");
       }
 
-      alert("Registro exitoso. Ingresa el código enviado a tu correo para activar tu cuenta.");
-      window.location.href = `/verificar-correo?email=${encodeURIComponent(emailT)}`;
+      alert(
+        "Registro exitoso. Ingresa el código enviado a tu correo para activar tu cuenta."
+      );
+      window.location.href = `/verificar-correo?email=${encodeURIComponent(
+        emailT
+      )}`;
     } catch (err) {
       console.error("Error en registro:", err);
       setErrorMsg(err.message || "Error en registro");
@@ -191,21 +211,67 @@ export default function RegistroPage() {
                 {/* Checklist de requisitos */}
                 {password.length > 0 && (
                   <ul className="ml-1 space-y-1 text-sm">
-                    <li className={`flex items-center gap-2 ${pwRules.hasMin ? "text-green-600" : "text-red-600"}`}>
-                      {pwRules.hasMin ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                    <li
+                      className={`flex items-center gap-2 ${
+                        pwRules.hasMin ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      {pwRules.hasMin ? (
+                        <CheckCircle size={16} />
+                      ) : (
+                        <XCircle size={16} />
+                      )}
                       Mínimo 8 caracteres
                     </li>
-                    <li className={`flex items-center gap-2 ${pwRules.hasUpper ? "text-green-600" : "text-red-600"}`}>
-                      {pwRules.hasUpper ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                    <li
+                      className={`flex items-center gap-2 ${
+                        pwRules.hasUpper ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      {pwRules.hasUpper ? (
+                        <CheckCircle size={16} />
+                      ) : (
+                        <XCircle size={16} />
+                      )}
                       Una letra mayúscula
                     </li>
-                    <li className={`flex items-center gap-2 ${pwRules.hasLower ? "text-green-600" : "text-red-600"}`}>
-                      {pwRules.hasLower ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                    <li
+                      className={`flex items-center gap-2 ${
+                        pwRules.hasLower ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      {pwRules.hasLower ? (
+                        <CheckCircle size={16} />
+                      ) : (
+                        <XCircle size={16} />
+                      )}
                       Una letra minúscula
                     </li>
-                    <li className={`flex items-center gap-2 ${pwRules.hasNumber ? "text-green-600" : "text-red-600"}`}>
-                      {pwRules.hasNumber ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                    <li
+                      className={`flex items-center gap-2 ${
+                        pwRules.hasNumber ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      {pwRules.hasNumber ? (
+                        <CheckCircle size={16} />
+                      ) : (
+                        <XCircle size={16} />
+                      )}
                       Un número
+                    </li>
+                    <li
+                      className={`flex items-center gap-2 ${
+                        pwRules.hasSpecial
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {pwRules.hasSpecial ? (
+                        <CheckCircle size={16} />
+                      ) : (
+                        <XCircle size={16} />
+                      )}
+                      Un carácter especial (por ejemplo ! @ # $ %)
                     </li>
                   </ul>
                 )}
@@ -220,7 +286,9 @@ export default function RegistroPage() {
                   required
                 />
                 {password2.length > 0 && password !== password2 && (
-                  <p className="text-sm text-red-600 -mt-2">Las contraseñas no coinciden.</p>
+                  <p className="text-sm text-red-600 -mt-2">
+                    Las contraseñas no coinciden.
+                  </p>
                 )}
 
                 {/* Rol visual */}
@@ -240,43 +308,48 @@ export default function RegistroPage() {
                 </div>
                 <span>
                   Acepto los{" "}
-                  <a href="#" className="text-[#4A90E2] font-semibold hover:underline">
+                  <a
+                    href="#"
+                    className="text-[#4A90E2] font-semibold hover:underline"
+                  >
                     términos y condiciones
                   </a>{" "}
                   y la{" "}
-                  <a href="#" className="text-[#4A90E2] font-semibold hover:underline">
+                  <a
+                    href="#"
+                    className="text-[#4A90E2] font-semibold hover:underline"
+                  >
                     política de privacidad
                   </a>
                 </span>
               </label>
 
               <div className="space-y-4">
-               <PrimaryButton
-  type="submit"
-  disabled={loading}
-  className="w-full flex items-center justify-center gap-3 py-4 text-lg font-bold
+                <PrimaryButton
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-3 py-4 text-lg font-bold
              transition-all duration-200
              hover:-translate-y-0.5 hover:shadow-lg
              focus:outline-none focus:ring-4 focus:ring-[#FFD54F]/40
              active:translate-y-0 active:scale-[0.98]"
-          >
-            <UserPlus size={20} />
-            {loading ? "Creando cuenta..." : "Crear mi cuenta"}
-          </PrimaryButton>
+                >
+                  <UserPlus size={20} />
+                  {loading ? "Creando cuenta..." : "Crear mi cuenta"}
+                </PrimaryButton>
 
-          <SecondaryButton
-            type="button"
-            onClick={()=>window.history.back()}
-            className="w-full flex items-center justify-center gap-3 py-4 text-lg font-bold
+                <SecondaryButton
+                  type="button"
+                  onClick={() => window.history.back()}
+                  className="w-full flex items-center justify-center gap-3 py-4 text-lg font-bold
                       transition-all duration-200 border-2
                       hover:bg-[#EAF3FF] hover:border-[#4A90E2] hover:text-[#1C1C1C]
                       focus:outline-none focus:ring-4 focus:ring-[#4A90E2]/30
                       active:scale-[0.98]"
-          >
-            <ArrowLeft size={20} />
-            Volver al inicio
-          </SecondaryButton>
-
+                >
+                  <ArrowLeft size={20} />
+                  Volver al inicio
+                </SecondaryButton>
               </div>
             </form>
 
@@ -284,7 +357,10 @@ export default function RegistroPage() {
             <div className="text-center pt-4">
               <p className="text-[#666666]">
                 ¿Ya tienes cuenta?
-                <a href="/login" className="text-[#4A90E2] font-semibold hover:underline ml-1">
+                <a
+                  href="/login"
+                  className="text-[#4A90E2] font-semibold hover:underline ml-1"
+                >
                   Inicia sesión aquí
                 </a>
               </p>
@@ -308,7 +384,9 @@ export default function RegistroPage() {
 
               <div className="space-y-3">
                 <h2 className="text-5xl font-bold">La Pape</h2>
-                <p className="text-xl opacity-95 font-medium">Tu viaje creativo comienza aquí</p>
+                <p className="text-xl opacity-95 font-medium">
+                  Tu viaje creativo comienza aquí
+                </p>
               </div>
             </div>
 
@@ -319,7 +397,9 @@ export default function RegistroPage() {
                 </div>
                 <div className="text-left flex-1">
                   <h4 className="font-bold text-lg">10% de descuento</h4>
-                  <p className="text-sm opacity-90">En tu primera compra al registrarte</p>
+                  <p className="text-sm opacity-90">
+                    En tu primera compra al registrarte
+                  </p>
                 </div>
               </div>
 
@@ -329,7 +409,9 @@ export default function RegistroPage() {
                 </div>
                 <div className="text-left flex-1">
                   <h4 className="font-bold text-lg">Acceso exclusivo</h4>
-                  <p className="text-sm opacity-90">A promociones y productos nuevos</p>
+                  <p className="text-sm opacity-90">
+                    A promociones y productos nuevos
+                  </p>
                 </div>
               </div>
 
@@ -339,7 +421,9 @@ export default function RegistroPage() {
                 </div>
                 <div className="text-left flex-1">
                   <h4 className="font-bold text-lg">Compra más rápido</h4>
-                  <p className="text-sm opacity-90">Guarda tus datos para futuras compras</p>
+                  <p className="text-sm opacity-90">
+                    Guarda tus datos para futuras compras
+                  </p>
                 </div>
               </div>
             </div>
@@ -354,7 +438,9 @@ export default function RegistroPage() {
                 &quot;Desde que me registré, recibo ofertas exclusivas y mi proceso de compra
                 es mucho más rápido. ¡Totalmente recomendado!&quot;
               </p>
-              <p className="text-sm opacity-90 font-medium">— Carlos M., Miembro desde 2023</p>
+              <p className="text-sm opacity-90 font-medium">
+                — Carlos M., Miembro desde 2023
+              </p>
             </div>
           </div>
         </div>
