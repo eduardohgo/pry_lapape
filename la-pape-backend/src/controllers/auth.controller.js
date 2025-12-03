@@ -15,12 +15,16 @@ import {
   isValidRole,
   normalizeEmail,
 } from "../utils/validators.js";
+import { OAuth2Client } from "google-auth-library";
 
 const rawMinutes = Number.parseInt(process.env.JWT_EXPIRES_MINUTES || "", 10);
 const SESSION_MINUTES =
   Number.isFinite(rawMinutes) && rawMinutes > 0 ? rawMinutes : 120;
 const JWT_EXPIRES_IN = `${SESSION_MINUTES}m`;
 const LOGIN_METHODS = ["PASSWORD_ONLY", "PASSWORD_2FA", "PASSWORD_SECRET"];
+
+// Cliente de Google para verificar el token
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // 🔐 Límites de seguridad (lista de cotejo)
 const MAX_FAILED_LOGIN_ATTEMPTS = 5; // intentos de login
@@ -52,6 +56,10 @@ function toPublicUser(user) {
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
+
+    // Info de login social
+    provider: user.provider || "LOCAL",
+    avatarUrl: user.avatarUrl || null,
   };
 }
 
@@ -511,6 +519,81 @@ export async function logout(req, res, next) {
 
     return res.json({ ok: true, message: "Sesión cerrada" });
   } catch (err) {
+    return next(err);
+  }
+}
+
+// 🔹 Login con Google
+export async function loginWithGoogle(req, res, next) {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({ error: "Falta el token de Google" });
+    }
+
+    // 1) Verificar el token con Google
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      return res.status(400).json({ error: "Token de Google inválido" });
+    }
+
+    const email = normalizeEmail(payload.email);
+    const nombre = payload.name || payload.given_name || email.split("@")[0];
+    const googleId = payload.sub;
+    const avatarUrl = payload.picture;
+
+    // 2) Buscar usuario por email
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // 3) Crear usuario nuevo ligado a Google
+      const randomPassword = `${googleId}.${Date.now()}`;
+      const passwordHash = await bcrypt.hash(randomPassword, 10);
+
+      user = await User.create({
+        nombre,
+        email,
+        passwordHash,
+        rol: "CLIENTE",
+
+        isVerified: true, // Google ya verificó el correo
+
+        provider: "GOOGLE",
+        providerId: googleId,
+        avatarUrl,
+        twoFAEnabled: false,
+        loginMethod: "PASSWORD_ONLY",
+      });
+    } else {
+      // 4) Actualizar campos si ya existe
+      if (!user.provider) user.provider = "LOCAL";
+      if (!user.providerId) user.providerId = googleId;
+      if (!user.isVerified && payload.email_verified) {
+        user.isVerified = true;
+      }
+      if (!user.avatarUrl && avatarUrl) {
+        user.avatarUrl = avatarUrl;
+      }
+
+      await user.save();
+    }
+
+    // 5) Crear sesión normal con tu JWT
+    const loginResult = await finalizeLogin(user, req);
+
+    return res.json({
+      ok: true,
+      ...loginResult,
+      user: toPublicUser(user),
+    });
+  } catch (err) {
+    console.error("Error en loginWithGoogle:", err);
     return next(err);
   }
 }
