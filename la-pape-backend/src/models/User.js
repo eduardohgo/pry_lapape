@@ -15,7 +15,13 @@ const sessionSchema = new Schema(
 const userSchema = new Schema(
   {
     nombre: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
     passwordHash: { type: String, required: true },
 
     rol: {
@@ -23,6 +29,15 @@ const userSchema = new Schema(
       enum: ["CLIENTE", "TRABAJADOR", "DUENO", "ADMIN"],
       default: "CLIENTE",
     },
+
+    // 🔹 Login social (Google)
+    provider: {
+      type: String,
+      enum: ["LOCAL", "GOOGLE"],
+      default: "LOCAL",
+    },
+    providerId: { type: String },
+    avatarUrl: { type: String },
 
     // Verificación de cuenta
     isVerified: { type: Boolean, default: false },
@@ -62,7 +77,9 @@ const userSchema = new Schema(
   { timestamps: true }
 );
 
-userSchema.methods.clearExpiredSessions = function clearExpiredSessions(now = new Date()) {
+userSchema.methods.clearExpiredSessions = function clearExpiredSessions(
+  now = new Date()
+) {
   if (!Array.isArray(this.sessions) || this.sessions.length === 0) return;
   this.sessions = this.sessions.filter(
     (session) => session.expiresAt && session.expiresAt > now
