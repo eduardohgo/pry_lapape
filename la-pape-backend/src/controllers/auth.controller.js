@@ -27,7 +27,7 @@ const LOGIN_METHODS = ["PASSWORD_ONLY", "PASSWORD_2FA", "PASSWORD_SECRET"];
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // 🔐 Límites de seguridad (lista de cotejo)
-const MAX_FAILED_LOGIN_ATTEMPTS = 5; // intentos de login
+const MAX_FAILED_LOGIN_ATTEMPTS = 3; // intentos de login
 const LOGIN_LOCK_MINUTES = 15; // tiempo bloqueado
 
 const MAX_RESET_REQUESTS = 3; // solicitudes de recuperación
@@ -458,6 +458,7 @@ export async function forgotPassword(req, res, next) {
   }
 }
 
+// 🔐 resetPassword con límite de 3 cambios por día
 export async function resetPassword(req, res, next) {
   try {
     const { email, code, newPassword } = req.body;
@@ -480,6 +481,29 @@ export async function resetPassword(req, res, next) {
       return res.status(400).json({ error: "Código incorrecto" });
     }
 
+    // 🔐 Límite de cambios de contraseña por día
+    const now = new Date();
+
+    // Si es otro día distinto al último cambio, reiniciamos contador
+    if (
+      !user.passwordChangesDate ||
+      now.toDateString() !== user.passwordChangesDate.toDateString()
+    ) {
+      user.passwordChangesCount = 0;
+      user.passwordChangesDate = now;
+    }
+
+    // Si ya hizo 3 cambios hoy, bloqueamos el 4.º
+    if ((user.passwordChangesCount || 0) >= 3) {
+      return res.status(429).json({
+        error:
+          "Ya realizaste varios cambios de contraseña hoy. Inténtalo de nuevo más tarde.",
+        tooManyPasswordChanges: true,
+        limit: 3,
+      });
+    }
+
+    // ✅ Cambio de contraseña permitido
     user.passwordHash = await bcrypt.hash(newPassword, 10);
     user.resetOTPHash = undefined;
     user.resetOTPExp = undefined;
@@ -496,6 +520,10 @@ export async function resetPassword(req, res, next) {
     // 🔐 También limpiamos bloqueos de login por si los tenía
     user.failedLoginAttempts = 0;
     user.lockUntil = undefined;
+
+    // Incrementar contador de cambios de contraseña de hoy
+    user.passwordChangesCount = (user.passwordChangesCount || 0) + 1;
+    user.passwordChangesDate = now;
 
     await user.save();
 
