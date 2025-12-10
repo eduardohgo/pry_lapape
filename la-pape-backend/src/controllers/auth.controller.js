@@ -27,7 +27,7 @@ const LOGIN_METHODS = ["PASSWORD_ONLY", "PASSWORD_2FA", "PASSWORD_SECRET"];
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // 🔐 Límites de seguridad (lista de cotejo)
-const MAX_FAILED_LOGIN_ATTEMPTS = 3; // intentos de login
+const MAX_FAILED_LOGIN_ATTEMPTS = 5; // intentos de login
 const LOGIN_LOCK_MINUTES = 15; // tiempo bloqueado
 
 const MAX_RESET_REQUESTS = 3; // solicitudes de recuperación
