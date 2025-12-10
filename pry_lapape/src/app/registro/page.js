@@ -1,4 +1,3 @@
-
 "use client";
 import Header from "@/components/Header";
 import Input from "@/components/Inputs";
@@ -21,6 +20,20 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+/* ---------- Helpers de sanitización en el front (extra) ---------- */
+const sanitizeSimple = (value) =>
+  typeof value === "string"
+    ? value
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<\/?[^>]+(>|$)/g, "")
+        .replace(/[\u0000-\u001F\u007F]+/g, "")
+        .trim()
+    : "";
+
+const containsScriptTag = (value) =>
+  typeof value === "string" &&
+  /<script[^>]*>[\s\S]*?<\/script>/gi.test(value);
+
 /* ---------- Selector visual de Rol ---------- */
 function RoleSelector({ value, onChange }) {
   const roles = [
@@ -32,14 +45,22 @@ function RoleSelector({ value, onChange }) {
   return (
     <div className="flex flex-col gap-2">
       <span className="text-sm text-[#666]">Rol</span>
-      <div role="radiogroup" aria-label="Selecciona tu rol" className="flex flex-wrap gap-2">
+      <div
+        role="radiogroup"
+        aria-label="Selecciona tu rol"
+        className="flex flex-wrap gap-2"
+      >
         {roles.map(({ value: v, label, Icon }) => {
           const checked = value === v;
           return (
             <label
               key={v}
               className={`cursor-pointer select-none rounded-xl border px-3 py-2 flex items-center gap-2
-                ${checked ? "border-[#4A90E2] bg-[#EAF3FF]" : "border-[#E0E0E0] hover:border-[#4A90E2]"}
+                ${
+                  checked
+                    ? "border-[#4A90E2] bg-[#EAF3FF]"
+                    : "border-[#E0E0E0] hover:border-[#4A90E2]"
+                }
                 text-[#1C1C1C]`}
             >
               <input
@@ -77,7 +98,7 @@ export default function RegistroPage() {
     const hasUpper = /[A-Z]/.test(password);
     const hasLower = /[a-z]/.test(password);
     const hasNumber = /\d/.test(password);
-    const hasSpecial = /[^A-Za-z0-9]/.test(password); // 👈 carácter especial
+    const hasSpecial = /[^A-Za-z0-9]/.test(password); // carácter especial
     return { hasMin, hasUpper, hasLower, hasNumber, hasSpecial };
   }, [password]);
 
@@ -90,8 +111,14 @@ export default function RegistroPage() {
     e.preventDefault();
     setErrorMsg("");
 
-    const nombreT = nombre.trim();
-    const emailT = email.trim();
+    // Rechaza intentos con <script> (demostración de validación de entrada)
+    if (containsScriptTag(nombre) || containsScriptTag(email)) {
+      setErrorMsg("Detectamos contenido no permitido en el formulario.");
+      return;
+    }
+
+    const nombreT = sanitizeSimple(nombre);
+    const emailT = sanitizeSimple(email);
 
     if (!nombreT || !emailT) {
       setErrorMsg("Completa nombre y correo.");
@@ -105,7 +132,6 @@ export default function RegistroPage() {
       setErrorMsg("La contraseña debe tener al menos 8 caracteres.");
       return;
     }
-    // 👇 validación extra para que coincida con los requisitos mostrados
     if (
       !pwRules.hasUpper ||
       !pwRules.hasLower ||
@@ -113,7 +139,7 @@ export default function RegistroPage() {
       !pwRules.hasSpecial
     ) {
       setErrorMsg(
-        "La contraseña debe tener al menos una mayúscula, una minúscula, un número y un carácter especial."
+        "La contraseña debe tener mayúsculas, minúsculas, número y un carácter especial."
       );
       return;
     }
@@ -286,7 +312,7 @@ export default function RegistroPage() {
                   onChange={(e) => setPassword2(e.target.value)}
                   required
                 />
-                {password2.length > 0 && password !== password2 && (
+                {password2.length > 0 && !passwordsMatch && (
                   <p className="text-sm text-red-600 -mt-2">
                     Las contraseñas no coinciden.
                   </p>
@@ -457,7 +483,9 @@ export default function RegistroPage() {
 
             <div className="space-y-2">
               <h3 className="text-3xl font-bold">La Pape</h3>
-              <p className="opacity-95 font-medium">Tu viaje creativo comienza aquí</p>
+              <p className="opacity-95 font-medium">
+                Tu viaje creativo comienza aquí
+              </p>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
