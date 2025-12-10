@@ -8,7 +8,7 @@ import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { LogIn, UserPlus, Package, Sparkles, Shield, Truck, Star } from "lucide-react";
 import { api, decodeJWT } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
-import { GoogleLogin } from "@react-oauth/google"; // 👈 NUEVO
+import { GoogleLogin } from "@react-oauth/google";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -54,12 +54,17 @@ export default function LoginPage() {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    const emailTrimmed = email.trim();
+
+    const emailTrimmed = email
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<\/?[^>]+(>|$)/g, "")
+      .trim();
 
     if (!emailTrimmed || !password) {
       alert("Ingresa tu correo y contraseña.");
       return;
     }
+
     try {
       setLoading(true);
       const res = await api("/auth/login", { body: { email: emailTrimmed, password } });
@@ -131,7 +136,7 @@ export default function LoginPage() {
     }
   };
 
-  // 👇 NUEVO: handlers para Google
+  // Handlers para Google
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       setLoading(true);
@@ -147,11 +152,9 @@ export default function LoginPage() {
       });
 
       if (res?.token) {
-        // usamos el email del backend si viene, si no, el que esté en el JWT
         const fallbackEmail = res.user?.email || "";
         const user = normalizeUser(res.user, fallbackEmail, res.token);
 
-        // con Google lo guardamos como 'remember: true' para que se quede la sesión
         authLogin({ user, token: res.token, remember: true });
 
         try {
@@ -276,13 +279,9 @@ export default function LoginPage() {
               <div className="flex-grow border-t border-[#E0E0E0]"></div>
             </div>
 
-            {/* Login con Google real */}
+            {/* Login con Google */}
             <div className="flex justify-center">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={handleGoogleError}
-                width="100%"
-              />
+              <GoogleLogin onSuccess={handleGoogleSuccess} onError={handleGoogleError} width="100%" />
             </div>
           </div>
         </div>
@@ -324,7 +323,7 @@ export default function LoginPage() {
               </div>
 
               <div className="flex items-center justify-center gap-4 p-5 bg-white/15 rounded-2xl backdrop-blur-sm border border-white/25 shadow-sm">
-                <div className="w-12 h-12 bg.white/20 rounded-xl flex items-center justify-center">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
                   <Shield size={24} className="text-white" />
                 </div>
                 <div className="text-left flex-1">
