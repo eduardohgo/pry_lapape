@@ -15,10 +15,16 @@ const app = express();
 /* Config básica                                                       */
 /* ------------------------------------------------------------------ */
 app.set("trust proxy", 1); // necesario en Render/Proxys para cookies, IP real, etc.
+// Oculta cabecera X-Powered-By: Express
+app.disable("x-powered-by");
 
-const originsEnv = process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
+const originsEnv =
+  process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
 const allowedOrigins = originsEnv
-  ? originsEnv.split(",").map((o) => o.trim()).filter(Boolean)
+  ? originsEnv
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean)
   : ["http://localhost:3000", "http://127.0.0.1:3000"];
 
 const corsOptions = {
@@ -42,7 +48,27 @@ app.options("*", cors(corsOptions));
 /* ------------------------------------------------------------------ */
 /* Seguridad y rendimiento                                            */
 /* ------------------------------------------------------------------ */
-app.use(helmet());
+// Helmet con algunas opciones explícitas de seguridad
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    // La API no entrega HTML, así que el CSP no es crítico; si quisieras
+    // puedes activarlo y ajustarlo para tu front.
+    contentSecurityPolicy: false,
+  })
+);
+
+// HSTS solo en producción (HTTPS obligatorio)
+if (process.env.NODE_ENV === "production") {
+  app.use(
+    helmet.hsts({
+      maxAge: 60 * 60 * 24 * 60, // ~60 días
+      includeSubDomains: true,
+      preload: true,
+    })
+  );
+}
+
 app.use(compression());
 app.use(morgan("dev"));
 app.use(
@@ -62,7 +88,9 @@ app.use(express.urlencoded({ extended: true }));
 /* ------------------------------------------------------------------ */
 /* Rutas                                                              */
 /* ------------------------------------------------------------------ */
-app.get("/", (_req, res) => res.json({ ok: true, name: "La Pape API (Mongo)" }));
+app.get("/", (_req, res) =>
+  res.json({ ok: true, name: "La Pape API (Mongo)" })
+);
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
 app.use("/auth", authRoutes);
@@ -71,12 +99,16 @@ app.use("/auth", authRoutes);
 /* 404 & errores                                                       */
 /* ------------------------------------------------------------------ */
 app.use((req, res) => {
-  res.status(404).json({ error: `Ruta no encontrada: ${req.method} ${req.originalUrl}` });
+  res
+    .status(404)
+    .json({ error: `Ruta no encontrada: ${req.method} ${req.originalUrl}` });
 });
 
 app.use((err, _req, res, _next) => {
   console.error("🔥 Error handler:", err);
-  const status = Number.isInteger(err.status || err.code) ? (err.status || err.code) : 500;
+  const status = Number.isInteger(err.status || err.code)
+    ? err.status || err.code
+    : 500;
   res.status(status).json({ error: err.message || "Internal Server Error" });
 });
 
@@ -89,7 +121,9 @@ const PORT = process.env.PORT || 4000;
   try {
     console.log(`🧭 Node version: ${process.version}`);
     if (typeof fetch === "undefined") {
-      throw new Error("'fetch' no está disponible: usa Node 18+ o agrega un polyfill");
+      throw new Error(
+        "'fetch' no está disponible: usa Node 18+ o agrega un polyfill"
+      );
     }
 
     await connectDB();
@@ -102,7 +136,11 @@ const PORT = process.env.PORT || 4000;
     if (keepAliveUrl) {
       const minutes = Number(process.env.KEEP_ALIVE_INTERVAL_MINUTES || 14);
       const intervalMs = Math.max(1, minutes) * 60 * 1000;
-      console.log(`🕑 Keep-alive activado: ping cada ${intervalMs / 60000} min a ${keepAliveUrl}`);
+      console.log(
+        `🕑 Keep-alive activado: ping cada ${
+          intervalMs / 60000
+        } min a ${keepAliveUrl}`
+      );
 
       const ping = () =>
         fetch(keepAliveUrl, { cache: "no-store" })
