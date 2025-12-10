@@ -1,164 +1,58 @@
-import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import compression from "compression";
-import morgan from "morgan";
+// src/routes/auth.routes.js
+import { Router } from "express";
 import rateLimit from "express-rate-limit";
+import {
+  register,
+  verifyEmail,
+  loginStep1,
+  loginStep2,
+  verifySecretQuestion,
+  forgotPassword,
+  resetPassword,
+  logout,
+  me,
+  updateLoginMethod,
+  loginWithGoogle,
+} from "../controllers/auth.controller.js";
+import { authenticate } from "../middlewares/auth.middleware.js";
 
-import { connectDB } from "./db.js";
-import authRoutes from "./routes/auth.routes.js";
+const router = Router();
 
-const app = express();
-
-/* ------------------------------------------------------------------ */
-/* Config básica                                                       */
-/* ------------------------------------------------------------------ */
-app.set("trust proxy", 1); // necesario en Render/Proxys para cookies, IP real, etc.
-// Oculta cabecera X-Powered-By: Express
-app.disable("x-powered-by");
-
-const originsEnv =
-  process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
-const allowedOrigins = originsEnv
-  ? originsEnv
-      .split(",")
-      .map((o) => o.trim())
-      .filter(Boolean)
-  : ["http://localhost:3000", "http://127.0.0.1:3000"];
-
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // permite curl y server-to-server
-
-    const normalized = origin.endsWith("/") ? origin.slice(0, -1) : origin;
-
-    if (allowedOrigins.includes(normalized)) return callback(null, true);
-
-    callback(new Error(`CORS: origen no permitido -> ${origin}`));
+// 🔐 Limitador específico para login (protección fuerza bruta)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 20, // máx 20 intentos por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "Demasiados intentos de inicio de sesión. Intenta más tarde.",
   },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-};
-
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
-
-/* ------------------------------------------------------------------ */
-/* Seguridad y rendimiento                                            */
-/* ------------------------------------------------------------------ */
-// Helmet con algunas opciones explícitas de seguridad
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    // La API no entrega HTML, así que el CSP no es crítico; si quisieras
-    // puedes activarlo y ajustarlo para tu front.
-    contentSecurityPolicy: false,
-  })
-);
-
-// HSTS solo en producción (HTTPS obligatorio)
-if (process.env.NODE_ENV === "production") {
-  app.use(
-    helmet.hsts({
-      maxAge: 60 * 60 * 24 * 60, // ~60 días
-      includeSubDomains: true,
-      preload: true,
-    })
-  );
-}
-
-app.use(compression());
-app.use(morgan("dev"));
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: "Demasiadas peticiones, intenta más tarde.",
-  })
-);
-
-/* ------------------------------------------------------------------ */
-/* Parsers                                                            */
-/* ------------------------------------------------------------------ */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-/* ------------------------------------------------------------------ */
-/* Rutas                                                              */
-/* ------------------------------------------------------------------ */
-app.get("/", (_req, res) =>
-  res.json({ ok: true, name: "La Pape API (Mongo)" })
-);
-app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
-
-app.use("/auth", authRoutes);
-
-/* ------------------------------------------------------------------ */
-/* 404 & errores                                                       */
-/* ------------------------------------------------------------------ */
-app.use((req, res) => {
-  res
-    .status(404)
-    .json({ error: `Ruta no encontrada: ${req.method} ${req.originalUrl}` });
 });
 
-app.use((err, _req, res, _next) => {
-  console.error("🔥 Error handler:", err);
-  const status = Number.isInteger(err.status || err.code)
-    ? err.status || err.code
-    : 500;
-  res.status(status).json({ error: err.message || "Internal Server Error" });
+// 🔐 Limitador para recuperación de contraseña
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hora
+  max: 5, // máx 5 solicitudes por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "Demasiadas solicitudes de recuperación. Intenta más tarde.",
+  },
 });
 
-/* ------------------------------------------------------------------ */
-/* Arranque                                                            */
-/* ------------------------------------------------------------------ */
-const PORT = process.env.PORT || 4000;
+router.post("/register", register);
+router.post("/verify-email", verifyEmail);
 
-(async () => {
-  try {
-    console.log(`🧭 Node version: ${process.version}`);
-    if (typeof fetch === "undefined") {
-      throw new Error(
-        "'fetch' no está disponible: usa Node 18+ o agrega un polyfill"
-      );
-    }
+router.post("/login", loginLimiter, loginStep1);
+router.post("/verify-2fa", loginStep2);
+router.post("/verify-secret", verifySecretQuestion);
 
-    await connectDB();
+router.post("/forgot-password", forgotPasswordLimiter, forgotPassword);
+router.post("/reset-password", resetPassword);
 
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 API escuchando en puerto ${PORT}`);
-    });
+router.patch("/login-method", authenticate, updateLoginMethod);
+router.post("/logout", authenticate, logout);
+router.get("/me", authenticate, me);
+router.post("/login/google", loginLimiter, loginWithGoogle);
 
-    const keepAliveUrl = process.env.KEEP_ALIVE_URL;
-    if (keepAliveUrl) {
-      const minutes = Number(process.env.KEEP_ALIVE_INTERVAL_MINUTES || 14);
-      const intervalMs = Math.max(1, minutes) * 60 * 1000;
-      console.log(
-        `🕑 Keep-alive activado: ping cada ${
-          intervalMs / 60000
-        } min a ${keepAliveUrl}`
-      );
-
-      const ping = () =>
-        fetch(keepAliveUrl, { cache: "no-store" })
-          .then((res) => {
-            if (!res.ok) {
-              console.error(`Keep-alive: respuesta no OK (${res.status})`);
-            }
-          })
-          .catch((err) => {
-            console.error(`Keep-alive falló: ${err.message}`);
-          });
-
-      ping();
-      const timer = setInterval(ping, intervalMs);
-      server.on("close", () => clearInterval(timer));
-    }
-  } catch (err) {
-    console.error("❌ Error arrancando el servidor:", err);
-    process.exit(1);
-  }
-})();
+export default router;
