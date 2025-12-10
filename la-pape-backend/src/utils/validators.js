@@ -66,4 +66,3 @@ export const isSafeText = (value) => {
 
   return true;
 };
-
