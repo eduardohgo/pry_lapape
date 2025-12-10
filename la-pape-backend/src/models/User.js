@@ -70,6 +70,11 @@ const userSchema = new Schema(
     failedLoginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date },
 
+    // 🔐 Control de cambios de contraseña por día
+    // Máx. 3 cambios por día; a partir del 4.º se bloquea
+    passwordChangesCount: { type: Number, default: 0 },
+    passwordChangesDate: { type: Date },
+
     // Sesiones / auditoría
     lastLoginAt: { type: Date },
     sessions: { type: [sessionSchema], default: [] },
@@ -87,3 +92,4 @@ userSchema.methods.clearExpiredSessions = function clearExpiredSessions(
 };
 
 export default mongoose.model("User", userSchema);
+
